@@ -11,7 +11,7 @@ UsageRail's SDK checks API keys, applies rate limits and quotas, and counts usag
 ## Before you change anything
 
 1. Find the framework. The SDKs cover Express, Hono, Fastify and Next.js on Node.js 22+, and FastAPI, Starlette, Flask and Django on Python 3.10+. For other languages, use the HTTP check endpoint described at https://usagerail.com/docs. It adds one network call per request.
-2. Ask how callers authenticate today. With no keys yet, use `auth: "api-key"` and UsageRail issues the keys. With existing keys or logins, use `auth: "custom"` with a `consumer` function. In Node.js it returns `{ id }` for the caller, or `null` for anonymous traffic. In Python it returns the customer's ID as a string, or `None`. A bare string returned in Node.js is counted as anonymous.
+2. Ask how callers authenticate today. With no keys yet, use `auth: "api-key"` and UsageRail issues the keys. With existing keys or logins, use `auth: "custom"` with a `consumer` function. In Node.js it returns `{ id }` for the caller, or `null` for anonymous traffic. In Python it returns the customer's ID as a string, or `None`. A bare string returned in Node.js is counted as anonymous. Return an identity the app's own code has verified, never a value the caller can set, such as a plain header. UsageRail has to run after that authentication: in Express, `app.use(usageRail(...))` goes after the auth middleware. In FastAPI the identity must come from an authentication middleware, not `Depends(...)`, and since FastAPI runs the middleware added last first, add the auth middleware after the line that adds UsageRail. In Django, list UsageRail after `AuthenticationMiddleware`. In Flask, register the app's own `before_request` hook first.
 3. The user needs an app key from https://app.usagerail.com. Read it from the `USAGERAIL_APP_KEY` environment variable. Never write the key into source code, and never ask the user to paste it into the chat.
 
 ## Wire it in
@@ -108,6 +108,8 @@ app.post("/v1/generate", express.json(), async (req, res) => {
 ```
 
 Hono and Fastify have their own entry points: `@usagerail/node/hono` and `@usagerail/node/fastify`.
+
+On SIGTERM the Node.js SDK sends what's left, waiting at most 5 seconds, then lets the process exit. If the app handles SIGTERM itself, keep the value `usageRail()` returned and finish the app's own shutdown with `await middleware.engine.close()`.
 
 ## How callers send their key
 
