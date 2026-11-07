@@ -111,8 +111,8 @@ Update the API's own docs and client error handling for these.
 ## Tell the user before they deploy
 
 - Rate limits are counted per server instance by default.
-- WebSocket connections are not checked or counted.
-- If a process is killed hard (`kill -9`, out of memory), up to about 10 minutes of unsent counts are lost and never billed.
+- The Express middleware and the Python SDK don't check or count WebSocket connections. Hono counts a successful handshake once, and so does Fastify with `@fastify/websocket`.
+- Counts are sent every 60 seconds. A process killed with `kill -9` or by running out of memory loses the counts it hadn't sent, and they're never billed. A normal shutdown sends them first.
 - To charge customers, the user connects their own Stripe account. Money goes straight there, and UsageRail is not a merchant of record.
 
 Setup for each framework, options and known limitations: https://usagerail.com/docs
