@@ -11,10 +11,12 @@ UsageRail's SDK checks API keys, applies rate limits and quotas, and counts usag
 ## Before you change anything
 
 1. Find the framework. The SDKs cover Express, Hono, Fastify and Next.js on Node.js 22+, and FastAPI, Starlette, Flask and Django on Python 3.10+. For other languages, use the HTTP check endpoint described at https://usagerail.com/docs. It adds one network call per request.
-2. Ask how callers authenticate today. With no keys yet, use `auth: "api-key"` and UsageRail issues the keys. With existing keys or logins, use `auth: "custom"` with a function that returns the customer's ID. The docs for each framework show how.
+2. Ask how callers authenticate today. With no keys yet, use `auth: "api-key"` and UsageRail issues the keys. With existing keys or logins, use `auth: "custom"` with a `consumer` function. In Node.js it returns `{ id }` for the caller, or `null` for anonymous traffic. In Python it returns the customer's ID as a string, or `None`. A bare string returned in Node.js is counted as anonymous.
 3. The user needs an app key from https://app.usagerail.com. Read it from the `USAGERAIL_APP_KEY` environment variable. Never write the key into source code, and never ask the user to paste it into the chat.
 
 ## Wire it in
+
+Every request counts as 1 by default. The `track()` calls below only change that once the app counts units, which is set in the console under Settings > What counts as usage. While the app counts requests, `track()` does nothing.
 
 ### FastAPI or Starlette
 
@@ -57,6 +59,8 @@ Inside a route, `g.usagerail.track(n)` counts custom units.
 
 ```python
 # settings.py
+import os
+
 MIDDLEWARE = [
     # ...
     "usagerail.django.UsageRailMiddleware",
@@ -65,6 +69,19 @@ USAGERAIL = {"app_key": os.environ["USAGERAIL_APP_KEY"], "auth": "api-key"}
 ```
 
 Inside a view, `request.usagerail.track(n)` counts custom units.
+
+Under uvicorn or another ASGI server, wrap the application in `asgi.py`, or every restart loses the counts that hadn't gone out yet:
+
+```python
+import os
+
+from django.core.asgi import get_asgi_application
+from usagerail.django import asgi
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mysite.settings")
+
+application = asgi(get_asgi_application())
+```
 
 ### Express
 
@@ -112,7 +129,7 @@ Update the API's own docs and client error handling for these.
 
 - Rate limits are counted per server instance by default.
 - The Express middleware and the Python SDK don't check or count WebSocket connections. Hono counts a successful handshake once, and so does Fastify with `@fastify/websocket`.
-- Counts are sent every 60 seconds. A process killed with `kill -9` or by running out of memory loses the counts it hadn't sent, and they're never billed. A normal shutdown sends them first.
+- Counts are sent every 60 seconds. A process killed with `kill -9` or by running out of memory loses the counts it hadn't sent, and they're never billed. A normal shutdown sends them first (for Django under an ASGI server, only with the `asgi.py` wrapper above).
 - To charge customers, the user connects their own Stripe account. Money goes straight there, and UsageRail is not a merchant of record.
 
 Setup for each framework, options and known limitations: https://usagerail.com/docs
